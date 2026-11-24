@@ -5,6 +5,7 @@ cd "$(dirname "$0")"
 HERE="$PWD"
 LABEL=local.smsbridge
 [ -f .env ] || { echo "missing $HERE/.env" >&2; exit 1; }
+swiftc -parse-as-library -O translate.swift -o translate
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
 cat > "$PLIST" <<PL
 <?xml version="1.0" encoding="UTF-8"?>

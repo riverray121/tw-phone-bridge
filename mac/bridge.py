@@ -17,6 +17,7 @@ from pathlib import Path
 
 ADB = "/opt/homebrew/bin/adb"
 HERE = Path(__file__).parent
+TRANSLATE = HERE / "translate"
 BOT_ENV = HERE / ".env"
 STATE = HERE / "state.json"
 POLL_SECONDS = 3
@@ -71,6 +72,14 @@ def messages_after(last_id):
     return [json.loads(base64.b64decode(r)) for r in rows]
 
 
+def translate(text):
+    """English translation from the on-device translate binary; empty when already English."""
+    r = subprocess.run([TRANSLATE], input=text, capture_output=True, text=True, timeout=60)
+    if r.returncode != 0:
+        raise RuntimeError(f"translate failed: {r.stderr.strip()}")
+    return r.stdout.strip()
+
+
 def send_sms(number, body):
     b64 = base64.b64encode(body.encode()).decode()
     adb("content", "call", "--uri", "content://smsbridge", "--method", "send",
@@ -118,7 +127,15 @@ def forward_new_sms(bot, state):
         log(f"initialized last_id={state.last_id}")
     for m in messages_after(state.last_id):
         when = datetime.fromtimestamp(m["date"] / 1000).strftime("%b %d %H:%M")
-        mid = send(bot, f"TW text from {m['address']} ({when}):\n{m['body']}")
+        try:
+            english = translate(m["body"])
+        except (RuntimeError, subprocess.TimeoutExpired) as e:
+            log(f"sms {m['id']}: {e}")
+            english = f"(translation failed: {e})"
+        text = f"TW text from {m['address']} ({when}):\n{m['body']}"
+        if english:
+            text += f"\n\nEnglish:\n{english}"
+        mid = send(bot, text)
         state.last_id = m["id"]
         state.remember(mid, m["address"])
         state.save()

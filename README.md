@@ -29,7 +29,7 @@ flowchart LR
 | Dir | Runs on | What it does |
 |---|---|---|
 | `android/` | phone | Content provider `local.smsbridge`. Only the adb shell can call it: it requires `android.permission.DUMP`, which third-party apps cannot hold. `content://smsbridge/sms?after=ID` returns new inbox messages as base64 JSON. `call send` sends an SMS and waits for the radio's sent result. |
-| `mac/` | Mac, launchd `local.smsbridge` | Polls the provider and `dumpsys telephony.registry` every 3 s. Forwards texts and ringing calls to one Telegram chat. A reply to a forwarded message is sent back as SMS to that number. |
+| `mac/` | Mac, launchd `local.smsbridge` | Polls the provider and `dumpsys telephony.registry` every 3 s. Forwards texts, with an on-device English translation (`translate.swift`, Apple Translation framework), and ringing calls to one Telegram chat. A reply to a forwarded message is sent back as SMS to that number. |
 | `remote/` | Mac, launchd `local.phoneremote` | [ws-scrcpy](https://github.com/NetrisTV/ws-scrcpy) pinned and patched to listen on 127.0.0.1, plus a home-screen launcher (`app.html`). |
 | `call/` | Pi, systemd `twcall` | oFono drives the phone as a Bluetooth car kit. `twcall.py` takes the SCO voice socket (8 kHz 16-bit PCM) and bridges it to the browser with aiortc. The page dials, answers, hangs up and sends DTMF. |
 

@@ -1,0 +1,8 @@
+android/build/
+mac/state.json
+mac/bridge.log
+mac/.env
+remote/remote.log
+remote/icon-*.png
+call/static/icon-*.png
+remote/ws-scrcpy/

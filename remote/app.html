@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="TW Phone">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<title>TW Phone</title>
+<style>body{margin:0;background:#000;color:#aaa;font:16px -apple-system,sans-serif;display:grid;place-items:center;height:100vh}</style>
+</head>
+<body>
+<p id="s">Connecting to the Taiwan phone…</p>
+<script>
+// Opens the stream for the first connected Android device. WebCodecs decodes in hardware;
+// Broadway is a software decoder for browsers without it.
+const player = 'VideoDecoder' in window ? 'webcodecs' : 'broadway';
+const wsBase = `wss://${location.host}/?action=proxy-adb&remote=tcp%3A8886&udid=`;
+const tracker = new WebSocket(`wss://${location.host}/?action=goog-device-list`);
+tracker.onmessage = (e) => {
+  const msg = JSON.parse(e.data);
+  const list = msg.data && msg.data.list;
+  if (!list) return;
+  const dev = list.find((d) => d.state === 'device');
+  if (!dev) {
+    document.getElementById('s').textContent = 'Taiwan phone is not connected to the Mac mini.';
+    return;
+  }
+  tracker.close();
+  const ws = encodeURIComponent(wsBase + encodeURIComponent(dev.udid));
+  location.replace(`/#!action=stream&udid=${encodeURIComponent(dev.udid)}&player=${player}&ws=${ws}`);
+};
+tracker.onerror = () => {
+  document.getElementById('s').textContent = 'Cannot reach the Mac mini.';
+};
+</script>
+</body>
+</html>

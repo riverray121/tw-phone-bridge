@@ -1,0 +1,16 @@
+[Unit]
+Description=Taiwan phone remote calling bridge
+After=ofono.service bluetooth.service network-online.target
+Requires=ofono.service
+
+[Service]
+# Routes Bluetooth voice (SCO) over HCI so call audio reaches software. The Pi's Broadcom
+# controller defaults to its PCM pins, where nothing is connected.
+ExecStartPre=/usr/bin/hcitool cmd 0x3f 0x1c 0x01 0x02 0x00 0x01 0x01
+ExecStart=/opt/twcall/venv/bin/python /opt/twcall/twcall.py
+WorkingDirectory=/opt/twcall
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

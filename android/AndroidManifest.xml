@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="local.smsbridge" android:versionCode="1" android:versionName="1">
+    <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="24" />
+    <uses-permission android:name="android.permission.READ_SMS" />
+    <uses-permission android:name="android.permission.SEND_SMS" />
+    <application android:label="SMS Bridge" android:hasCode="true">
+        <!-- DUMP is held by the adb shell but cannot be granted to third-party apps,
+             so only the USB shell can read or send texts through this provider. -->
+        <provider android:name=".Bridge" android:authorities="smsbridge"
+            android:exported="true" android:permission="android.permission.DUMP" />
+    </application>
+</manifest>

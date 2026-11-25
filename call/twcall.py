@@ -10,6 +10,7 @@ import asyncio
 import json
 import logging
 import socket
+import subprocess
 from fractions import Fraction
 from pathlib import Path
 
@@ -30,7 +31,13 @@ FRAME_SAMPLES = 160  # 20 ms
 BYTES_PER_SAMPLE = 2
 MAX_DOWNLINK = RATE * BYTES_PER_SAMPLE * 3 // 10  # 300 ms; older audio is dropped to bound delay
 MAX_UPLINK = RATE * BYTES_PER_SAMPLE * 2 // 10
-RECONNECT_SECONDS = 30
+RECONNECT_MIN_SECONDS = 60
+RECONNECT_MAX_SECONDS = 1800
+REFRESH_DEBOUNCE_SECONDS = 0.5
+# Write_SCO_PCM_Int_Param on the Pi's Broadcom controller: route SCO over HCI so call audio
+# reaches software instead of the unconnected PCM pins. Any controller reset (for example Home
+# Assistant power-cycling the adapter) restores the default, so it is applied before every link.
+ROUTE_SCO_OVER_HCI = ["hcitool", "cmd", "0x3f", "0x1c", "0x01", "0x02", "0x00", "0x01", "0x01"]
 
 log = logging.getLogger("twcall")
 
@@ -49,6 +56,7 @@ class Sco:
 
     def attach(self, sock):
         self.close()
+        subprocess.run(ROUTE_SCO_OVER_HCI, check=True, capture_output=True, timeout=5)
         sock.setblocking(False)
         # oFono hands over the link with deferred setup: it is accepted by the first read,
         # which returns nothing. The socket never turns readable before that read.
@@ -74,6 +82,10 @@ class Sco:
         try:
             data = self.sock.recv(1024)
         except BlockingIOError:
+            return
+        except ConnectionResetError:
+            # The phone closes the link at the end of every call.
+            self.close()
             return
         except OSError as e:
             log.warning("sco read failed: %s", e)
@@ -166,6 +178,7 @@ class Phone:
         self.calls = {}
         self.clients = set()
         self.refreshing = asyncio.Lock()
+        self.pending = None
 
     async def ofono(self, path, interface, member, signature="", body=()):
         reply = await self.bus.call(
@@ -182,13 +195,28 @@ class Phone:
 
     async def _refresh(self):
         (modems,) = await self.ofono("/", "org.ofono.Manager", "GetModems")
-        hfp = [p for p, props in modems if props["Type"].value == "hfp" and props["Online"].value]
-        self.modem = hfp[0] if hfp else None
+        # A modem shows up Online before oFono finishes the HFP handshake; it is usable only
+        # once it exposes VoiceCallManager.
+        ready = [p for p, props in modems
+                 if props["Type"].value == "hfp" and props["Online"].value
+                 and "org.ofono.VoiceCallManager" in props["Interfaces"].value]
+        modem = ready[0] if ready else None
+        if modem != self.modem:
+            log.info("phone %s", "connected" if modem else "disconnected")
+        self.modem = modem
         self.calls = {}
         if self.modem:
             (calls,) = await self.ofono(self.modem, "org.ofono.VoiceCallManager", "GetCalls")
             self.calls = {p: {k: v.value for k, v in props.items()} for p, props in calls}
         await self.publish()
+
+    async def _debounced_refresh(self):
+        await asyncio.sleep(REFRESH_DEBOUNCE_SECONDS)
+        try:
+            await self.refresh()
+        except RuntimeError as e:
+            # The modem can vanish between GetModems and GetCalls when the link drops.
+            log.warning("refresh failed: %s", e)
 
     def snapshot(self):
         return {
@@ -213,7 +241,8 @@ class Phone:
             return
         if msg.interface in ("org.ofono.VoiceCallManager", "org.ofono.VoiceCall", "org.ofono.Manager",
                              "org.ofono.Modem"):
-            asyncio.ensure_future(self.refresh())
+            if self.pending is None or self.pending.done():
+                self.pending = asyncio.ensure_future(self._debounced_refresh())
 
     async def act(self, op, arg):
         if not self.modem:
@@ -234,16 +263,19 @@ class Phone:
             raise RuntimeError(f"unknown op {op}")
 
     async def keep_connected(self, device):
-        """Reconnects the phone's Bluetooth link when it drops, e.g. after a phone reboot."""
+        """Reconnects the phone after its link drops, backing off so a phone that stays away
+        does not keep the shared radio paging."""
+        delay = RECONNECT_MIN_SECONDS
         while True:
-            await asyncio.sleep(RECONNECT_SECONDS)
+            await asyncio.sleep(delay)
             if self.modem:
+                delay = RECONNECT_MIN_SECONDS
                 continue
             reply = await self.bus.call(Message(destination="org.bluez", path=device,
                                                 interface="org.bluez.Device1", member="Connect"))
             if reply.message_type == MessageType.ERROR:
-                log.info("reconnect to phone failed: %s", reply.error_name)
-
+                delay = min(delay * 2, RECONNECT_MAX_SECONDS)
+                log.info("reconnect to phone failed (%s), next try in %ds", reply.error_name, delay)
 
 async def main():
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")

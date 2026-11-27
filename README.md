@@ -32,6 +32,7 @@ flowchart LR
 | `mac/` | Mac, launchd `local.smsbridge` | Polls the provider and `dumpsys telephony.registry` every 3 s. Forwards texts, with an on-device English translation (`translate.swift`, Apple Translation framework), and ringing calls to one Telegram chat. A reply to a forwarded message is sent back as SMS to that number. |
 | `remote/` | Mac, launchd `local.phoneremote` | [ws-scrcpy](https://github.com/NetrisTV/ws-scrcpy) pinned and patched to listen on 127.0.0.1, plus a home-screen launcher (`app.html`). |
 | `call/` | Pi, systemd `twcall` | oFono drives the phone as a Bluetooth car kit. `twcall.py` takes the SCO voice socket (8 kHz 16-bit PCM) and bridges it to the browser with aiortc. The page dials, answers, hangs up and sends DTMF. |
+| `nav/` | phone | Floating Back button, `local.navbutton`, like iPhone's AssistiveTouch: tap is Back, long press is Home, drag moves it. The phone has no navigation bar and no Back key. An accessibility service is the only unprivileged way to press Back and Home; it subscribes to no accessibility events, so it reads nothing on screen. |
 
 ## Setup
 
@@ -41,6 +42,7 @@ flowchart LR
 4. `remote/install.sh`
 5. Pi: `apt install ofono bluez-tools`, then pair the phone with the Pi (the Pi acts as a hands-free unit) and trust it. Create `/opt/twcall/venv` with `dbus-fast aiortc aiohttp`. Then run `TWCALL_PI=user@pi call/deploy.sh`.
 6. On the iPhone, open both `:8443` URLs in Safari → Share → Add to Home Screen.
+7. `nav/build.sh`: builds and installs the floating Back button and turns on its accessibility service.
 
 ## Security
 

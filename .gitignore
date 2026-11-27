@@ -7,3 +7,4 @@ remote/icon-*.png
 call/static/icon-*.png
 remote/ws-scrcpy/
 mac/translate
+nav/build/
